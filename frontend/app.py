@@ -448,7 +448,7 @@ with left_column:
                     response = call_backend(
                         "/generate",
                         request_payload,
-                        timeout=180,
+                        timeout=140,
                     )
 
                     if response.ok:
@@ -486,13 +486,31 @@ with left_column:
                             f"Generation failed: {error}"
                         )
 
-                except requests.RequestException as exc:
+                except requests.Timeout as exc:
+
+                    st.error(
+                        "Document generation took too long. "
+                        "The backend is running, but Gemini did "
+                        "not finish within the request limit. "
+                        "Please try again shortly.\n\n"
+                        f"Technical details: {exc}"
+                    )
+
+                except requests.ConnectionError as exc:
 
                     st.error(
                         "Could not connect to the "
                         f"FastAPI backend at "
                         f"{BACKEND_URL}.\n\n"
                         "Make sure the backend is running.\n\n"
+                        f"Technical details: {exc}"
+                    )
+
+                except requests.RequestException as exc:
+
+                    st.error(
+                        "The backend request failed. "
+                        "Please check the backend logs and try again.\n\n"
                         f"Technical details: {exc}"
                     )
 
@@ -680,13 +698,29 @@ with right_column:
                 else:
 
                     st.error(
-                        "PDF export failed."
+                        "PDF export failed: "
+                        f"{get_error_message(response)}"
                     )
 
-            except requests.RequestException:
+            except requests.Timeout as exc:
 
                 st.error(
-                    "Backend unavailable."
+                    "PDF export timed out. "
+                    f"Technical details: {exc}"
+                )
+
+            except requests.ConnectionError as exc:
+
+                st.error(
+                    "Could not connect to the backend for PDF export. "
+                    f"Technical details: {exc}"
+                )
+
+            except requests.RequestException as exc:
+
+                st.error(
+                    "PDF export request failed. "
+                    f"Technical details: {exc}"
                 )
 
     else:

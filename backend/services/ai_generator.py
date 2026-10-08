@@ -29,7 +29,13 @@ class GeminiDocumentGenerator:
 
         if settings.gemini_api_key:
             self.client = genai.Client(
-                api_key=settings.gemini_api_key
+                api_key=settings.gemini_api_key,
+                http_options=types.HttpOptions(
+                    timeout=45_000,
+                    retry_options=types.HttpRetryOptions(
+                        attempts=1,
+                    ),
+                ),
             )
 
     def generate_document(
@@ -55,16 +61,28 @@ class GeminiDocumentGenerator:
 
         prompt = self._build_prompt(request)
 
-        response = self.client.models.generate_content(
-            model=self.settings.gemini_model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=self.settings.ai_temperature,
-                max_output_tokens=(
-                    self.settings.ai_max_output_tokens
-                ),
-            ),
-        )
+        try:
+            response = self._generate_with_model(
+                self.settings.gemini_model,
+                prompt,
+            )
+        except Exception as primary_error:
+            error_code = getattr(primary_error, "code", None)
+            fallback_model = self.settings.gemini_fallback_model
+            if (
+                error_code not in {503, 504}
+                or not fallback_model
+                or fallback_model == self.settings.gemini_model
+            ):
+                self._raise_generation_error(primary_error)
+
+            try:
+                response = self._generate_with_model(
+                    fallback_model,
+                    prompt,
+                )
+            except Exception as fallback_error:
+                self._raise_generation_error(fallback_error)
 
         content = getattr(
             response,
@@ -81,6 +99,31 @@ class GeminiDocumentGenerator:
             content=content.strip(),
             demo_mode=False,
         )
+
+    def _generate_with_model(self, model: str, prompt: str):
+        """Generate a response using one configured Gemini model."""
+        return self.client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=self.settings.ai_temperature,
+                max_output_tokens=self.settings.ai_max_output_tokens,
+                thinking_config=types.ThinkingConfig(
+                    thinking_level=self.settings.ai_thinking_level,
+                ),
+            ),
+        )
+
+    @staticmethod
+    def _raise_generation_error(exc: Exception) -> None:
+        """Raise an actionable message for temporary Gemini failures."""
+        error_code = getattr(exc, "code", None)
+        if error_code in {503, 504}:
+            raise RuntimeError(
+                "Gemini's primary and fallback models are temporarily "
+                "unavailable or timed out. Please try again later."
+            ) from exc
+        raise exc
 
     def _build_prompt(
         self,

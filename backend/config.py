@@ -2,6 +2,7 @@
 
 import os
 from functools import lru_cache
+from typing import Literal
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
@@ -19,7 +20,8 @@ class Settings(BaseModel):
     app_version: str = "1.0.0"
 
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.8-flash"
+    gemini_model: str = "gemini-3.5-flash-lite"
+    gemini_fallback_model: str = "gemini-3.8-flash"
 
     demo_mode: bool = False
 
@@ -39,10 +41,16 @@ class Settings(BaseModel):
     )
 
     ai_max_output_tokens: int = Field(
-        default=8192,
+        default=4096,
         ge=256,
         le=32768,
     )
+
+    ai_thinking_level: Literal[
+        "low",
+        "medium",
+        "high",
+    ] = "low"
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -79,6 +87,10 @@ def get_settings() -> Settings:
         ),
         gemini_model=os.getenv(
             "GEMINI_MODEL",
+            "gemini-3.5-flash-lite",
+        ),
+        gemini_fallback_model=os.getenv(
+            "GEMINI_FALLBACK_MODEL",
             "gemini-3.8-flash",
         ),
         demo_mode=os.getenv(
@@ -103,7 +115,11 @@ def get_settings() -> Settings:
         ai_max_output_tokens=int(
             os.getenv(
                 "AI_MAX_OUTPUT_TOKENS",
-                "8192",
+                "4096",
             )
         ),
+        ai_thinking_level=os.getenv(
+            "AI_THINKING_LEVEL",
+            "low",
+        ).lower(),
     )

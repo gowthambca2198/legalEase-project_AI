@@ -1,5 +1,7 @@
 import base64
 from io import BytesIO
+import os
+from pathlib import Path
 import re
 
 from docx import Document
@@ -274,11 +276,13 @@ class LegalDocumentService:
                 if self.logo_bytes:
                     self.image(
                         BytesIO(self.logo_bytes),
-                        x=(self.w - 14) / 2,
+                        x=(self.w - 30) / 2,
                         y=4,
+                        w=30,
                         h=12,
+                        keep_aspect_ratio=True,
                     )
-                    brand_y = 17
+                    brand_y = 19
                 else:
                     brand_y = 7
 
@@ -338,11 +342,38 @@ class LegalDocumentService:
             request.branding_name
             or "LegalEase"
         )
-        pdf.branding_font = {
+        core_fonts = {
             "Times New Roman": "Times",
             "Arial": "Helvetica",
             "Courier New": "Courier",
         }[request.branding_font]
+        windows_fonts = Path(
+            os.environ.get("WINDIR", "C:/Windows")
+        ) / "Fonts"
+        font_files = {
+            "Times New Roman": ("times.ttf", "timesbd.ttf"),
+            "Arial": ("arial.ttf", "arialbd.ttf"),
+            "Courier New": ("cour.ttf", "courbd.ttf"),
+        }
+        regular_font, bold_font = (
+            windows_fonts / name
+            for name in font_files[request.branding_font]
+        )
+
+        if regular_font.is_file() and bold_font.is_file():
+            pdf.add_font(
+                "LegalEaseUnicode",
+                "",
+                str(regular_font),
+            )
+            pdf.add_font(
+                "LegalEaseUnicode",
+                "B",
+                str(bold_font),
+            )
+            pdf.branding_font = "LegalEaseUnicode"
+        else:
+            pdf.branding_font = core_fonts
         pdf.logo_bytes = (
             base64.b64decode(
                 request.logo_base64,
@@ -353,7 +384,7 @@ class LegalDocumentService:
         )
         pdf.set_margins(
             10,
-            30 if pdf.logo_bytes else 20,
+            32 if pdf.logo_bytes else 20,
             10,
         )
 
